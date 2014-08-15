@@ -89,10 +89,6 @@
             context.fillText(current_word, 140, 160) 
             setCookie('current_word_index', word_index, 30);
             word_index++;
-            document.getElementById('objects').innerHTML +=
-                '<li><a href="javascript:drawWord(\'' + current_word + '\')">' + current_word +  '</a></li>';
-
-            
         }
 
 function setCookie(c_name, value, exdays) {

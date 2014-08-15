@@ -53,6 +53,9 @@ function doneEncoding( blob ) {
     // this should all move to a separate function
     var key = name + "/" + current_word + ".wav";
     var params = {Key: key, Body: blob};
+    var bucket = new AWS.S3({params: {Bucket: 'rdroid'}});
+    AWS.config.update({accessKeyId: access_key, secretAccessKey: secret_key});
+    AWS.config.region = 'us-east-1';
     bucket.putObject(params, function (err, data) {
       console.log(err ? 'ERROR!' : 'SAVED.');
       // go to next word if saved
@@ -61,8 +64,10 @@ function doneEncoding( blob ) {
         words = words.filter(function(i) {return recorded_words.indexOf(i) < 0;});
         drawWord(words[0]);
         // this is done in too many places, use message perhaps?
-        document.getElementById('objects').innerHTML +=
-        '<li><a href="javascript:drawWord(\'' + current_word + '\')">' + current_word +  '</a></li>';
+        bucket.getSignedUrl('getObject', params, function (err, url) {
+            document.getElementById('objects').innerHTML +=
+            '<li><a href="javascript:drawWord(\'' + current_word + '\');javascript:loadSound(\'' + url + '\')">' + current_word +  '</a>' + '</li>';
+            });
         }
     });
     //Recorder.setupDownload( blob, "myRecording" + ((recIndex<10)?"0":"") + recIndex + ".wav" );
