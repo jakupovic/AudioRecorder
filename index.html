@@ -7,6 +7,8 @@
 	<script src="js/audiodisplay.js"></script>
 	<script src="js/recorderjs/recorder.js"></script>
 	<script src="js/main.js"></script>
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+        <script src="https://sdk.amazonaws.com/js/aws-sdk-2.0.13.min.js"></script>
 	<style>
 	html { overflow: hidden; }
 	body { 
@@ -15,7 +17,7 @@
 		display: flex;
 		flex-direction: column;
 		height: 100vh;
-		width: 100%;
+		width: 30%;
 		margin: 0 0;
 	}
 	canvas { 
@@ -56,17 +58,160 @@
 		#controls { flex-direction: column; height: 100%; width: 10%;}
 		#viz { height: 100%; width: 90%;}
 	}
-
 	</style>
+<script>
+        var access_key = 'AKIAIXQNICJALH6ULGSQ';
+        var secret_key = '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';
+        var words = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
+        var word_index = 0;
+        if(getCookie('current_word_index')) {
+            word_index = getCookie('current_word_index');
+        }
+        var recorded_words = [];
+
+
+        /* draw a word on the words canvas
+           if word is passed in we draw that word otherwise ask the cookie what the current_word is
+        */
+        function drawWord(word) {
+            c = document.getElementById('text');
+            context = c.getContext('2d');
+            // clear the rectangle first
+            context.clearRect(0, 0, c.height, c.width);
+            context.font = '80pt Calibri';
+            if(word) {
+                var current_word = word;
+            } else {
+                // see if we knew of existing words and try to use it
+                var current_word = words[word_index];
+            }
+            setCookie('current_word', current_word, 30);
+            context.fillText(current_word, 140, 160) 
+            setCookie('current_word_index', word_index, 30);
+            word_index++;
+            document.getElementById('objects').innerHTML +=
+                '<li><a href="javascript:drawWord(\'' + current_word + '\')">' + current_word +  '</a></li>';
+
+            
+        }
+
+function setCookie(c_name, value, exdays) {
+    var exdate = new Date();
+    exdate.setDate(exdate.getDate() + exdays);
+    var c_value = escape(value) + ((exdays == null) ? "" : "; expires=" + exdate.toUTCString());
+    document.cookie = c_name + "=" + c_value;
+}
+
+function getCookie(c_name) {
+    var i, x, y, ARRcookies = document.cookie.split(";");
+    for (i = 0; i < ARRcookies.length; i++) {
+        x = ARRcookies[i].substr(0, ARRcookies[i].indexOf("="));
+        y = ARRcookies[i].substr(ARRcookies[i].indexOf("=") + 1);
+        x = x.replace(/^\s+|\s+$/g, "");
+        if (x == c_name) {
+            return unescape(y);
+        }
+    }
+}
+
+var guid = (function() {
+  function s4() {
+    return Math.floor((1 + Math.random()) * 0x10000)
+               .toString(16)
+               .substring(1);
+  }
+  return function() {
+    return s4() + s4() + s4() + s4();
+  };
+})();
+
+$(document).ready(function() {
+    var bucket = new AWS.S3({params: {Bucket: 'rdroid'}});
+    AWS.config.update({accessKeyId: access_key, secretAccessKey: secret_key});
+    AWS.config.region = 'us-east-1';
+
+    var name = getCookie('name');
+    if(!name || name == "") {
+        // generate a random number as name
+        var name = guid();
+        setCookie("name", name, 30);
+    } else {
+        console.log("found cookie for user name: " + name);
+    }
+
+  var bucket = new AWS.S3({params: {Bucket: 'rdroid', Delimiter: '/', Prefix: name + "/"}});
+  bucket.listObjects(function (err, data) {
+    if (err) {
+        console.log('Could not load objects from S3');
+    } else {
+        console.log('Loaded ' + data.Contents.length + ' items from S3');
+        for (var i = 0; i < data.Contents.length; i++) {
+                var key = data.Contents[i].Key;
+                var short_key_name = key.replace(name + '/', '').replace('\.wav', '');
+                recorded_words.push(short_key_name);
+                var params = {Bucket: 'rdroid', Key: key};
+                bucket.getSignedUrl('getObject', params, function (err, url) {
+                 document.getElementById('objects').innerHTML +=
+                    '<li><a href="javascript:drawWord(\'' + short_key_name + '\');javascript:loadSound(\'' + url + '\')">' + short_key_name +  '</a>' + '</li>';
+                    });
+        }
+        // finally put something on the screen
+       // if we found anything in s3 let's try to see which word we are on 
+
+        // current words are the items which are not recorded
+        /* http://stackoverflow.com/questions/1187518/javascript-array-difference */
+            words = words.filter(function(i) {return recorded_words.indexOf(i) < 0;});
+            drawWord(words[0]);
+    }
+  });
+});
+// Create the Audio Context
+if('webkitAudioContext' in window) {
+        window.AudioContext = new webkitAudioContext();
+}
+// Load the Sound with XMLHttpRequest
+function loadSound(url) {
+    var request = new XMLHttpRequest();
+    request.open("GET", url, true); // Path to Audio File
+    request.responseType = "arraybuffer"; // Read as Binary Data
+    request.onload = function() {
+        var incomingData = request.response;
+        play(incomingData);
+    };
+    request.send();
+}
+
+// Play Function
+function play(incomingData) {
+    source = window.AudioContext.createBufferSource(); // Create Sound Source
+    buffer = window.AudioContext.createBuffer(incomingData, true); // Create Mono Source Buffer from Raw Binary
+    source.buffer = buffer; // Add Buffered Data to Object
+    source.connect(window.AudioContext.destination); // Connect Sound Source to Output
+    source.noteOn(window.AudioContext.currentTime); // Play the Source when Triggered
+    var canvas = document.getElementById( "wavedisplay" );
+    drawBuffer( canvas.width, canvas.height, canvas.getContext('2d'), incomingData );
+}
+
+// Trigger Event for the Play Button
+//document.querySelector('play').addEventListener('click', loadSound);
+</script>
+
 </head>
 <body>
 	<div id="viz">
-		<canvas id="analyser" width="1024" height="500"></canvas>
-		<canvas id="wavedisplay" width="1024" height="500"></canvas>
+		<canvas id="text" width="320" height="240"><p>word</p></canvas>
+		<canvas id="analyser" width="320" height="240"></canvas>
+		<canvas id="wavedisplay" width="320" height="240"></canvas>
 	</div>
 	<div id="controls">
-		<img id="record" src="img/mic128.png" onclick="toggleRecording(this);">
-		<a id="save" href="#"><img src="img/save.svg"></a>
+	<img id="record" src="img/mic128.png" onclick="toggleRecording(this);">
+	<!-- <a id="save" href="#"><img src="img/save.svg"></a> -->
+	<a id="play" href="#"><img src="img/save.svg"></a>
 	</div>
+<div id="status"></div>
+<div>
+    Previously recorded
+    <ul id="objects"></ul>
+</div>
 </body>
 </html>

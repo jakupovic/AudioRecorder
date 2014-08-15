@@ -48,8 +48,25 @@ function gotBuffers( buffers ) {
 }
 
 function doneEncoding( blob ) {
-    Recorder.setupDownload( blob, "myRecording" + ((recIndex<10)?"0":"") + recIndex + ".wav" );
-    recIndex++;
+    var name = getCookie('name');
+    var current_word = getCookie('current_word');
+    // this should all move to a separate function
+    var key = name + "/" + current_word + ".wav";
+    var params = {Key: key, Body: blob};
+    bucket.putObject(params, function (err, data) {
+      console.log(err ? 'ERROR!' : 'SAVED.');
+      // go to next word if saved
+      if(!err) {
+        recorded_words.push(current_word);
+        words = words.filter(function(i) {return recorded_words.indexOf(i) < 0;});
+        drawWord(words[0]);
+        // this is done in too many places, use message perhaps?
+        document.getElementById('objects').innerHTML +=
+        '<li><a href="javascript:drawWord(\'' + current_word + '\')">' + current_word +  '</a></li>';
+        }
+    });
+    //Recorder.setupDownload( blob, "myRecording" + ((recIndex<10)?"0":"") + recIndex + ".wav" );
+    //recIndex++;
 }
 
 function toggleRecording( e ) {
